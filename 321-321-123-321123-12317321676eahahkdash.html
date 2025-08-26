@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Secure Messaging Toolbox — AES / OTP / Vigenère / Substitution</title>
+<style>
+  :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial}
+  body{max-width:980px;margin:18px auto;padding:18px;background:#fff;color:#111}
+  h1{font-size:1.3rem;margin:0 0 6px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .col{flex:1 1 320px;min-width:280px}
+  textarea,input,select{width:100%;box-sizing:border-box;padding:8px;border-radius:6px;border:1px solid #ccc;background:#fff}
+  textarea{min-height:120px;font-family:monospace;resize:vertical}
+  label{font-size:.9rem;margin-top:8px;display:block}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  button{padding:8px 10px;border-radius:7px;border:0;background:#0b5fff;color:#fff;cursor:pointer}
+  button.secondary{background:#6b7280}
+  .out{padding:10px;border-radius:6px;border:1px dashed #c7d2fe;background:#fbfbff;white-space:pre-wrap;word-break:break-word;min-height:80px}
+  .warn{color:#b84343;font-weight:600}
+  .muted{color:#555;font-size:.9rem}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .tab{padding:6px 10px;border-radius:8px;background:#f3f4f6;cursor:pointer}
+  .tab.active{background:#0b5fff;color:#fff}
+  .section{display:none}
+  .section.active{display:block}
+  .small{font-size:.85rem;color:#444}
+</style>
+</head>
+<body>
+  <h1>Secure Messaging Toolbox</h1>
+  <p class="muted">Pick a method: <strong>AES-GCM</strong> (recommended), <strong>One-Time Pad</strong> (perfect if you can securely share a pad), <strong>Vigenère/running key</strong> (good if key is long & random), or <strong>Substitution</strong> (fun, weak).</p>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="aes">AES-GCM (Recommended)</div>
+    <div class="tab" data-tab="otp">One-Time Pad (OTP)</div>
+    <div class="tab" data-tab="vig">Vigenère / Running Key</div>
+    <div class="tab" data-tab="sub">Substitution</div>
+  </div>
+
+  <!-- AES Section -->
+  <div id="aes" class="section active">
+    <div class="row">
+      <div class="col">
+        <label>Plaintext</label>
+        <textarea id="aesPlain"></textarea>
+        <label class="small">Passphrase</label>
+        <input id="aesPass" type="password" placeholder="Choose a strong passphrase"/>
+        <label class="small">PBKDF2 iterations (higher = slower but stronger)</label>
+        <input id="aesIter" value="300000" />
+        <div class="controls">
+          <button id="aesEnc">Encrypt →</button>
+          <button id="aesEncCopy" class="secondary">Encrypt & Copy</button>
+          <button id="aesEncDownload" class="secondary">Encrypt & Save (.txt)</button>
+        </div>
+      </div>
+
+      <div class="col">
+        <label>Encrypted blob (base64 salt||iv||ct)</label>
+        <textarea id="aesBlob" placeholder="Encrypted result will appear here"></textarea>
+        <label class="small">Passphrase (to decrypt)</label>
+        <input id="aesPass2" type="password" />
+        <div class="controls">
+          <button id="aesDec">Decrypt ←</button>
+          <button id="aesDecCopy" class="secondary">Decrypt & Copy</button>
+        </div>
+        <div id="aesResult" class="out" style="margin-top:10px">Decrypted text will appear here</div>
+      </div>
+    </div>
+    <p class="small">AES-GCM uses a random salt and iv. Keep passphrase secret. For best security use a long random passphrase (≥20 chars) or use a key file.</p>
+  </div>
+
+  <!-- OTP Section -->
+  <div id="otp" class="section">
+    <div class="row">
+      <div class="col">
+        <label>Generate OTP (random bytes, downloadable)</label>
+        <label class="small">Length (bytes) — at least message length in bytes</label>
+        <input id="otpLen" value="256" />
+        <div class="controls">
+          <button id="genOtp">Generate & Download Pad</button>
+        </div>
+        <label style="margin-top:8px">Plaintext (UTF-8)</label>
+        <textarea id="otpPlain"></textarea>
+        <label class="small">Upload pad file (binary) to use</label>
+        <input id="otpFile" type="file" />
+        <div class="controls">
+          <button id="otpEnc">Encrypt with Pad →</button>
+          <button id="otpDec" class="secondary">Decrypt with Pad ←</button>
+        </div>
+      </div>
+
+      <div class="col">
+        <label>Result (base64-encoded XOR output)</label>
+        <textarea id="otpOut"></textarea>
+        <div class="small muted">OTP warning: pad must be truly random, as long as message, and never reused. If pad leaks or reused, security collapses.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vigenère Section -->
+  <div id="vig" class="section">
+    <div class="row">
+      <div class="col">
+        <label>Plaintext</label>
+        <textarea id="vigPlain"></textarea>
+        <label class="small">Key (letters only) OR click generate long random key</label>
+        <input id="vigKey" />
+        <div class="controls">
+          <button id="vigGen">Generate Random Key (length = 200)</button>
+          <button id="vigEnc">Encode (Vigenère) →</button>
+        </div>
+      </div>
+
+      <div class="col">
+        <label>Encoded / Ciphertext</label>
+        <textarea id="vigCipher"></textarea>
+        <div class="controls">
+          <button id="vigDec">Decode (Vigenère) ←</button>
+          <button id="vigCopy" class="secondary">Copy</button>
+        </div>
+        <div class="small muted" style="margin-top:8px">Tip: If your key is as long and random as the message and never reused, Vigenère becomes a one-time-pad-like scheme.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Substitution Section -->
+  <div id="sub" class="section">
+    <div class="row">
+      <div class="col">
+        <label>Monoalphabetic Key (26 letters, a→?)</label>
+        <input id="subKey" value="phqgiumeaylnofdxjkrcvstzwb" />
+        <div class="controls">
+          <button id="subGen">Generate Random Key</button>
+          <button id="subEnc">Encode →</button>
+        </div>
+        <label>Plaintext</label>
+        <textarea id="subPlain"></textarea>
+      </div>
+
+      <div class="col">
+        <label>Encoded</label>
+        <textarea id="subCipher"></textarea>
+        <div class="controls">
+          <button id="subDec">Decode ←</button>
+          <button id="subCopy" class="secondary">Copy</button>
+        </div>
+        <div class="small muted" style="margin-top:8px">Monoalphabetic substitution is easy to break via frequency analysis.</div>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+  <div class="muted small">Security notes: This page runs entirely in your browser. No network calls. For real security use AES with a high-entropy key or a securely distributed OTP. Avoid short passphrases. Never reuse pads (OTP) or reuse Vigenère keys for multiple messages.</div>
+
+<script>
+/* Utility helpers */
+function randBytes(len) {
+  const b = new Uint8Array(len); crypto.getRandomValues(b); return b;
+}
+function bufToBase64(buf){ let s=''; const bytes=new Uint8Array(buf); const chunk=0x8000; for(let i=0;i<bytes.length;i+=chunk) s+=String.fromCharCode.apply(null, bytes.subarray(i,i+chunk)); return btoa(s); }
+function base64ToBuf(b64){ const bin=atob(b64); const len=bin.length; const bytes=new Uint8Array(len); for(let i=0;i<len;i++) bytes[i]=bin.charCodeAt(i); return bytes.buffer; }
+function strToBuf(s){ return new TextEncoder().encode(s); }
+function bufToStr(buf){ return new TextDecoder().decode(buf); }
+
+/* TAB UI */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById(t.dataset.tab).classList.add('active');
+  });
+});
+
+/* -------------------- AES-GCM (PBKDF2) -------------------- */
+const AES_PBKDF2_HMAC = 'SHA-256';
+async function deriveKeyPBKDF2(pass, salt, iterations, keyLen=256){
+  const base = await crypto.subtle.importKey('raw', strToBuf(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations, hash:AES_PBKDF2_HMAC}, base, {name:'AES-GCM', length:keyLen}, false, ['encrypt','decrypt']);
+}
+async function aesEncrypt(plain, pass, iterations){
+  const salt = randBytes(16);
+  const iv = randBytes(12);
+  const key = await deriveKeyPBKDF2(pass, salt.buffer, iterations);
+  const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv: iv.buffer}, key, strToBuf(plain));
+  // concat salt+iv+ct
+  const out = new Uint8Array(salt.length + iv.length + ct.byteLength);
+  out.set(salt,0); out.set(iv, salt.length); out.set(new Uint8Array(ct), salt.length+iv.length);
+  return bufToBase64(out.buffer);
+}
+async function aesDecrypt(blobB64, pass, iterations){
+  const buf = base64ToBuf(blobB64);
+  const all = new Uint8Array(buf);
+  if(all.length < 1) throw new Error('Empty blob');
+  const salt = all.slice(0,16).buffer;
+  const iv = all.slice(16,28).buffer;
+  const ct = all.slice(28).buffer;
+  const key = await deriveKeyPBKDF2(pass, salt, iterations);
+  const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv}, key, ct);
+  return bufToStr(pt);
+}
+
+document.getElementById('aesEnc').addEventListener('click', async ()=>{
+  const plain = document.getElementById('aesPlain').value || '';
+  const pass = document.getElementById('aesPass').value || '';
+  const iter = Math.max(10000, parseInt(document.getElementById('aesIter').value||'300000'));
+  if(!plain) return alert('Enter plaintext');
+  if(!pass) return alert('Enter a passphrase');
+  try{
+    document.getElementById('aesEnc').disabled = true; document.getElementById('aesEnc').textContent='Encrypting…';
+    const out = await aesEncrypt(plain, pass, iter);
+    document.getElementById('aesBlob').value = out;
+    document.getElementById('aesResult').textContent = 'Encrypted — share blob + passphrase separately.';
+  }catch(e){
+    document.getElementById('aesResult').textContent = 'Error: '+e.message;
+  }finally{ document.getElementById('aesEnc').disabled=false; document.getElementById('aesEnc').textContent='Encrypt →'; }
+});
+document.getElementById('aesDec').addEventListener('click', async ()=>{
+  const blob = document.getElementById('aesBlob').value.trim();
+  const pass = document.getElementById('aesPass2').value || document.getElementById('aesPass').value || '';
+  const iter = Math.max(10000, parseInt(document.getElementById('aesIter').value||'300000'));
+  if(!blob) return alert('Paste encrypted blob');
+  if(!pass) return alert('Enter passphrase');
+  try{
+    document.getElementById('aesDec').disabled=true; document.getElementById('aesDec').textContent='Decrypting…';
+    const pt = await aesDecrypt(blob, pass, iter);
+    document.getElementById('aesResult').textContent = pt;
+  }catch(e){
+    document.getElementById('aesResult').textContent = 'Decryption failed: '+(e.message||e);
+  }finally{ document.getElementById('aesDec').disabled=false; document.getElementById('aesDec').textContent='Decrypt ←'; }
+});
+document.getElementById('aesEncCopy').addEventListener('click', ()=>{ document.getElementById('aesEnc').click(); setTimeout(()=>navigator.clipboard?.writeText(document.getElementById('aesBlob').value).catch(()=>{}), 300); });
+document.getElementById('aesEncDownload').addEventListener('click', ()=>{ document.getElementById('aesEnc').click(); setTimeout(()=>{ const blob=new Blob([document.getElementById('aesBlob').value], {type:'text/plain'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='aes-encrypted.txt'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); },400); });
+document.getElementById('aesDecCopy').addEventListener('click', ()=>{ const txt=document.getElementById('aesResult').textContent||''; if(txt) navigator.clipboard?.writeText(txt).catch(()=>{}); });
+
+/* -------------------- OTP (XOR with random pad) -------------------- */
+document.getElementById('genOtp').addEventListener('click', ()=> {
+  const len = Math.max(1, parseInt(document.getElementById('otpLen').value||'256'));
+  const pad = randBytes(len);
+  const blob = new Blob([pad], {type:'application/octet-stream'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='otp-pad.bin'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  alert('Pad generated and downloaded. Keep it secret and never reuse.');
+});
+
+async function readFileAsArrayBuffer(file){ return new Promise((res, rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(r.error); r.readAsArrayBuffer(file); }); }
+
+document.getElementById('otpEnc').addEventListener('click', async ()=> {
+  const plain = document.getElementById('otpPlain').value || '';
+  const f = document.getElementById('otpFile').files[0];
+  if(!f) return alert('Upload pad file');
+  const padBuf = await readFileAsArrayBuffer(f);
+  const plainBuf = strToBuf(plain);
+  if(padBuf.byteLength < plainBuf.byteLength) return alert('Pad too short for message');
+  const pad = new Uint8Array(padBuf);
+  const out = new Uint8Array(plainBuf.byteLength);
+  const p = new Uint8Array(plainBuf);
+  for(let i=0;i<p.length;i++) out[i] = p[i] ^ pad[i];
+  document.getElementById('otpOut').value = bufToBase64(out.buffer);
+  alert('Encrypted with pad. Never reuse pad bytes.');
+});
+document.getElementById('otpDec').addEventListener('click', async ()=> {
+  const b64 = document.getElementById('otpOut').value.trim();
+  const f = document.getElementById('otpFile').files[0];
+  if(!f) return alert('Upload pad file to decrypt');
+  if(!b64) return alert('Paste base64 ciphertext (otpOut).');
+  const padBuf = await readFileAsArrayBuffer(f);
+  const ctBuf = base64ToBuf(b64);
+  if(padBuf.byteLength < ctBuf.byteLength) return alert('Pad too short for ciphertext');
+  const pad = new Uint8Array(padBuf), ct = new Uint8Array(ctBuf);
+  const out = new Uint8Array(ct.length);
+  for(let i=0;i<ct.length;i++) out[i] = ct[i] ^ pad[i];
+  document.getElementById('otpOut').value = btoa(String.fromCharCode.apply(null, out)); // show base64 of bytes (also can decode as UTF-8)
+  try{ document.getElementById('otpOut').value = bufToStr(out.buffer); }catch(e){}
+});
+
+/* -------------------- Vigenère -------------------- */
+function cleanLetters(s){ return s.toLowerCase().replace(/[^a-z]/g,''); }
+function genRandLetters(n){ const letters='abcdefghijklmnopqrstuvwxyz'; let out=''; for(let i=0;i<n;i++) out += letters[Math.floor(Math.random()*26)]; return out; }
+document.getElementById('vigGen').addEventListener('click', ()=>{ document.getElementById('vigKey').value = genRandLetters(200); });
+
+document.getElementById('vigEnc').addEventListener('click', ()=>{
+  const key = document.getElementById('vigKey').value;
+  if(!key) return alert('Provide or generate a key');
+  const k = cleanLetters(key);
+  if(k.length===0) return alert('Key must contain letters');
+  const plain = document.getElementById('vigPlain').value || '';
+  let out=''; let ki=0;
+  for(let ch of plain){
+    const lower = ch.toLowerCase();
+    if(lower >= 'a' && lower <= 'z'){
+      const p = lower.charCodeAt(0)-97;
+      const shift = k[ki % k.length].charCodeAt(0)-97;
+      const c = (p + shift) % 26;
+      const cc = String.fromCharCode(97+c);
+      out += (ch === lower ? cc : cc.toUpperCase());
+      ki++;
+    } else out += ch;
+  }
+  document.getElementById('vigCipher').value = out;
+});
+document.getElementById('vigDec').addEventListener('click', ()=>{
+  const key = document.getElementById('vigKey').value;
+  if(!key) return alert('Provide the key');
+  const k = cleanLetters(key);
+  if(k.length===0) return alert('Key must contain letters');
+  const cipher = document.getElementById('vigCipher').value || '';
+  let out=''; let ki=0;
+  for(let ch of cipher){
+    const lower = ch.toLowerCase();
+    if(lower >= 'a' && lower <= 'z'){
+      const c = lower.charCodeAt(0)-97;
+      const shift = k[ki % k.length].charCodeAt(0)-97;
+      const p = (c - shift + 26) % 26;
+      const pc = String.fromCharCode(97+p);
+      out += (ch === lower ? pc : pc.toUpperCase());
+      ki++;
+    } else out += ch;
+  }
+  document.getElementById('vigPlain').value = out;
+});
+document.getElementById('vigCopy').addEventListener('click', ()=> navigator.clipboard?.writeText(document.getElementById('vigCipher').value).catch(()=>{}));
+
+/* -------------------- Substitution -------------------- */
+function genSubKey(){
+  const letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
+  for(let i=letters.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [letters[i],letters[j]]=[letters[j],letters[i]]; }
+  return letters.join('');
+}
+document.getElementById('subGen').addEventListener('click', ()=> document.getElementById('subKey').value = genSubKey());
+
+function buildSubMap(key){
+  key = key.toLowerCase();
+  const map = {};
+  for(let i=0;i<26;i++) map[String.fromCharCode(97+i)] = key[i] || '?';
+  return map;
+}
+function buildRevMap(key){
+  key = key.toLowerCase();
+  const r = {};
+  for(let i=0;i<26;i++) r[key[i]] = String.fromCharCode(97+i);
+  return r;
+}
+
+document.getElementById('subEnc').addEventListener('click', ()=>{
+  const key = document.getElementById('subKey').value;
+  if(!key || key.length<26) return alert('Key must be 26 letters');
+  const map = buildSubMap(key);
+  const plain = document.getElementById('subPlain').value || '';
+  let out='';
+  for(let ch of plain){
+    const low = ch.toLowerCase();
+    if(map[low]) out += (ch===low ? map[low] : map[low].toUpperCase());
+    else out += ch;
+  }
+  document.getElementById('subCipher').value = out;
+});
+document.getElementById('subDec').addEventListener('click', ()=>{
+  const key = document.getElementById('subKey').value;
+  if(!key || key.length<26) return alert('Key must be 26 letters');
+  const rev = buildRevMap(key);
+  const cipher = document.getElementById('subCipher').value || '';
+  let out='';
+  for(let ch of cipher){
+    const low = ch.toLowerCase();
+    if(rev[low]) out += (ch===low ? rev[low] : rev[low].toUpperCase());
+    else out += ch;
+  }
+  document.getElementById('subPlain').value = out;
+});
+document.getElementById('subCopy').addEventListener('click', ()=> navigator.clipboard?.writeText(document.getElementById('subCipher').value).catch(()=>{}));
+
+</script>
+</body>
+</html>
